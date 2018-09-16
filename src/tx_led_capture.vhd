@@ -1,6 +1,12 @@
 -- Capture the various LED configurations on button pushes
 -- Output to be prepared for transmission
 
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+library xil_defaultlib;
+
 entity tx_led_capture is
   port(
     clk_100  : in  std_logic;
