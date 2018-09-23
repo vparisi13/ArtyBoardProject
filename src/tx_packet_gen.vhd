@@ -41,73 +41,85 @@ end entity tx_packet_gen;
 
 architecture arch of tx_packet_gen is
 
-  signal counter    : unsigned(26 downto 0);
-  signal gen_packet : std_logic;
-
+  signal idle_count : unsigned(26 downto 0);
   signal pkt_cnt : unsigned(1 downto 0);
-  signal tvalid  : std_logic;
+
+  type fsm_type is (Idle, writeWord, resetTxFifo);
+  signal current_state is fsm_type;
 
 begin
 
-  -- Wait a given interval before sending a packet
-  interPacketCount : process(clk_100)
-  begin
-    if rising_edge(clk_100) then
-      if rst_100 = '1' then
-        counter <= (others => '0');
-        gen_packet <= '0';
-      else
-        gen_packet <= '0';
-        if counter = INTER_PACKET_PERIOD-1 then
-          counter <= (others => '0');
-          gen_packet <= '1';
-        else
-          counter <= counter + 1;
-        end if;
-      end if;
-    end if;
-  end process interPacketCount;
+  m_axi_wstrb   <= (others => '1');
+  m_axi_bready  <= '1';
+  m_axi_araddr  <= (others => '0');
+  m_axi_rready  <= '1';
+  m_axi_arvalid <= '0';
 
   -- Write out the packet in the order red value, green value, blue value
   writePacket : process(clk_100)
   begin
     if rising_edge(clk_100) then
       if rst_100 = '1' then
-        tvalid <= '0';
+        current_state <= Idle;
+        idle_count <= (others => '0');
+        pkt_cnt <= (others => '0');
+        m_axi_awaddr <= (others => '0');
+        m_axi_awvalid <= '0';
+        m_axi_wvalid <= '0';
       else
-        
-
-        -- Write state machine for Idle, write word, get response
-
-
-
+        m_axi_awvalid <= '0';
+        m_axi_wvalid <= '0';
+        case current_state is
+          when Idle =>
+            -- Send the new values every second
+            if idle_count = INTER_PACKET_PERIOD then
+              current_state <= writeWord;
+              idle_count <= (others => '0');
+            else
+              idle_count <= idle_count + 1;
+            end if;
+          when writeWord =>
+            m_axi_awaddr <= x"4";
+            m_axi_awvalid <= '1';
+            m_axi_wvalid <= '1';
+            if m_axi_bvalid = '1' then
+              if m_axi_bresp /= "00" then
+                current_state <= resetTxFifo;
+                pkt_cnt <= (others => '0');
+                m_axi_wvalid <= '0';
+                m_axi_awvalid <= '0';
+              else
+                if pkt_cnt = 2 then
+                  pkt_cnt <= (others => '0');
+                  current_state <= Idle;
+                  m_axi_wvalid <= '0';
+                  m_axi_awvalid <= '0';
+                else
+                  pkt_cnt <= pkt_cnt + 1;
+                end if;
+              end if;
+            end if;
+          when resetTxFifo =>
+            m_axi_awaddr <= x"C";
+            m_axi_awvalid <= '1';
+            m_axi_wvalid <= '1';
+            if m_axi_bvalid = '1' then
+              current_state <= Idle;
+              m_axi_awvalid <= '0';
+              m_axi_wvalid <= '0';
+            end if;
+          when others =>
+            current_state <= Idle;
+        end case;
       end if;
     end if;
   end process writePacket;
 
   -- output data depending on which word of the packet is being written
-  m_axi_wdata   <= x"000000" & tx_red when pkt_cnt = 1 else
-                   x"000000" & tx_green when pkt_cnt = 2 else
-                   x"000000" & tx_blue when pkt_cnt = 3 else
+  m_axi_wdata   <= x"00000001" when current_state <= resetTxFifo else
+                   x"0000001" & tx_red when pkt_cnt = 0 else
+                   x"0000002" & tx_green when pkt_cnt = 1 else
+                   x"0000004" & tx_blue when pkt_cnt = 2 else
                    (others => '0');
-  m_axi_wvalid  <= tvalid;
-  m_axi_awvalid <= tvalid;
-  m_axi_awaddr  <= x"4";
-  m_axi_wstrb   <= x"F";
-
-
-  m_axi_bresp   
-  m_axi_bvalid  
-  m_axi_bready  
-  m_axi_araddr  
-  m_axi_arvalid 
-  m_axi_arready 
-  m_axi_rdata   
-  m_axi_rresp   
-  m_axi_rvalid  
-  m_axi_rready  
-
-  m_axi_wready  
-  m_axi_awready 
 
 end architecture arch;

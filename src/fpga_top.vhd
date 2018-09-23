@@ -8,9 +8,10 @@ library xil_defaultlib;
 
 entity fpga_top is
   port(
-    clk_100 : in  std_logic;
-    btns    : in  std_logic_vector(3 downto 0);
-    switches : in  std_logic_vector(3 downto 0)
+    clk_100  : in  std_logic;
+    btns     : in  std_logic_vector(3 downto 0);
+    switches : in  std_logic_vector(3 downto 0);
+    uart_tx  : out std_logic
   );
 end entity fpga_top;
 
@@ -20,6 +21,27 @@ architecture arch of fpga_top is
   signal tx_red   : std_logic_vector(3 downto 0);
   signal tx_green : std_logic_vector(3 downto 0);
   signal tx_blue  : std_logic_vector(3 downto 0);
+
+  signal uart_interrupt : std_logic;
+  signal axi_rst_n      : std_logic;
+
+  signal uart_axi_awaddr  : std_logic_vector(3 downto 0);
+  signal uart_axi_awvalid : std_logic;
+  signal uart_axi_awready : std_logic;
+  signal uart_axi_wdata   : std_logic_vector(31 downto 0);
+  signal uart_axi_wstrb   : std_logic_vector(3 downto 0);
+  signal uart_axi_wvalid  : std_logic;
+  signal uart_axi_wready  : std_logic;
+  signal uart_axi_bresp   : std_logic_vector(1 downto 0);
+  signal uart_axi_bvalid  : std_logic;
+  signal uart_axi_bready  : std_logic;
+  signal uart_axi_araddr  : std_logic_vector(3 downto 0);
+  signal uart_axi_arvalid : std_logic;
+  signal uart_axi_arready : std_logic;
+  signal uart_axi_rdata   : std_logic_vector(31 downto 0);
+  signal uart_axi_rresp   : std_logic_vector(1 downto 0);
+  signal uart_axi_rvalid  : std_logic;
+  signal uart_axi_rready  : std_logic
 
   component uart_interface
     port(
@@ -70,43 +92,64 @@ begin
       tx_blue  => tx_blue
     );
 
-
-
-
-
-
-
-
-
-
-  uart_interface_inst : uart_interface
+-- Generate a 3 word packet containing the rgb data
+  tx_pkt_gen : entity xil_defaultlib.tx_packet_gen
+    generic map(
+      INTER_PACKET_PERIOD => 100_000_000
+    )
     port map(
-      s_axi_aclk    => ,
-      s_axi_aresetn => ,
-      interrupt     => ,
-      s_axi_awaddr  => ,
-      s_axi_awvalid => ,
-      s_axi_awready => ,
-      s_axi_wdata   => ,
-      s_axi_wstrb   => ,
-      s_axi_wvalid  => ,
-      s_axi_wready  => ,
-      s_axi_bresp   => ,
-      s_axi_bvalid  => ,
-      s_axi_bready  => ,
-      s_axi_araddr  => ,
-      s_axi_arvalid => ,
-      s_axi_arready => ,
-      s_axi_rdata   => ,
-      s_axi_rresp   => ,
-      s_axi_rvalid  => ,
-      s_axi_rready  => ,
-      rx            => ,
-      tx            => 
+      clk_100       => clk_100,
+      rst_100       => rst_100,
+      tx_red        => tx_red,
+      tx_green      => tx_green,
+      tx_blue       => tx_blue,
+      m_axi_awaddr  => uart_axi_awaddr,
+      m_axi_awvalid => uart_axi_awvalid,
+      m_axi_awready => uart_axi_awready,
+      m_axi_wdata   => uart_axi_wdata,
+      m_axi_wstrb   => uart_axi_wstrb,
+      m_axi_wvalid  => uart_axi_wvalid,
+      m_axi_wready  => uart_axi_wready,
+      m_axi_bresp   => uart_axi_bresp,
+      m_axi_bvalid  => uart_axi_bvalid,
+      m_axi_bready  => uart_axi_bready,
+      m_axi_araddr  => uart_axi_araddr,
+      m_axi_arvalid => uart_axi_arvalid,
+      m_axi_arready => uart_axi_arready,
+      m_axi_rdata   => uart_axi_rdata,
+      m_axi_rresp   => uart_axi_rresp,
+      m_axi_rvalid  => uart_axi_rvalid,
+      m_axi_rready  => uart_axi_rready
     );
 
+-- AXI uses an active low reset
+  axi_rst_n <= not rst_100;
 
-
-
+-- Turn the packetized rgb data into uart
+  uart_interface_inst : uart_interface
+    port map(
+      s_axi_aclk    => clk_100,
+      s_axi_aresetn => axi_rst_n,
+      interrupt     => uart_interrupt,
+      s_axi_awaddr  => uart_axi_awaddr,
+      s_axi_awvalid => uart_axi_awvalid,
+      s_axi_awready => uart_axi_awready,
+      s_axi_wdata   => uart_axi_wdata,
+      s_axi_wstrb   => uart_axi_wstrb,
+      s_axi_wvalid  => uart_axi_wvalid,
+      s_axi_wready  => uart_axi_wready,
+      s_axi_bresp   => uart_axi_bresp,
+      s_axi_bvalid  => uart_axi_bvalid,
+      s_axi_bready  => uart_axi_bready,
+      s_axi_araddr  => uart_axi_araddr,
+      s_axi_arvalid => uart_axi_arvalid,
+      s_axi_arready => uart_axi_arready,
+      s_axi_rdata   => uart_axi_rdata,
+      s_axi_rresp   => uart_axi_rresp,
+      s_axi_rvalid  => uart_axi_rvalid,
+      s_axi_rready  => uart_axi_rready,
+      rx            => '0',
+      tx            => uart_tx
+    );
 
 end architecture arch;
